@@ -35,7 +35,7 @@ from aiokafka import AIOKafkaConsumer
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "iot_video")
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
-APP_PORT = int(os.getenv("APP_PORT", "8000"))
+APP_PORT = int(os.getenv("APP_PORT", "5006"))
 
 # ---------- FastAPI app ----------
 app = FastAPI(title="Vehicle Dashboard")
