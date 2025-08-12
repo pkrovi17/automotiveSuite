@@ -5,10 +5,9 @@ Shows speed, position, and acceleration status per device.
 
 Usage:
   pip install kafka-python rich
-  python kafka_vehicle_dashboard.py --bootstrap localhost:9092 --topic iot_video
+  python cli-dash.py
 """
 
-import argparse
 import json
 import ast
 import time
@@ -21,6 +20,15 @@ from rich.live import Live
 from rich.table import Table
 from rich.panel import Panel
 
+
+# ---------- CONFIG (hardcoded defaults) ----------
+BOOTSTRAP_SERVERS = "localhost:9092"
+TOPIC_NAME = "iot_video"
+GROUP_ID = "vehicle-dashboard"
+POLL_MS = 500
+FROM_BEGINNING = False  # Set to True if you want to read the backlog
+
+
 def parse_record(raw: str) -> Optional[Dict[str, Any]]:
     try:
         return json.loads(raw)
@@ -31,6 +39,7 @@ def parse_record(raw: str) -> Optional[Dict[str, Any]]:
         return obj if isinstance(obj, dict) else None
     except Exception:
         return None
+
 
 def extract_vehicle_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if msg.get("event") != "Vehicle_Movement":
@@ -55,9 +64,10 @@ def extract_vehicle_movement(msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "latitude": str(data.get("latitude")) if data.get("latitude") is not None else None,
         "longitude": str(data.get("longitude")) if data.get("longitude") is not None else None,
         "state": data.get("state"),
-        "movement": data.get("movement"),  # acceleration / deceleration / constant
+        "movement": data.get("movement"),
         "timestamp": ts_iso,
     }
+
 
 def render_table(latest: Dict[str, Dict[str, Any]]) -> Panel:
     table = Table(title="Vehicle Movement (live)", expand=True)
@@ -86,21 +96,14 @@ def render_table(latest: Dict[str, Dict[str, Any]]) -> Panel:
 
     return Panel(table, title="Kafka Dashboard", border_style="bold")
 
-def main():
-    ap = argparse.ArgumentParser(description="Live Kafka dashboard for Vehicle_Movement events.")
-    ap.add_argument("--bootstrap", default="localhost:9092", help="Kafka bootstrap servers (host:port)")
-    ap.add_argument("--topic", default="iot_video", help="Kafka topic to read")
-    ap.add_argument("--group-id", default="vehicle-dashboard", help="Consumer group id")
-    ap.add_argument("--from-beginning", action="store_true", help="Start from earliest offsets")
-    ap.add_argument("--poll-ms", type=int, default=500, help="Poll interval in milliseconds")
-    args = ap.parse_args()
 
+def main():
     consumer = KafkaConsumer(
-        args.topic,
-        bootstrap_servers=args.bootstrap,
-        group_id=args.group_id,
+        TOPIC_NAME,
+        bootstrap_servers=BOOTSTRAP_SERVERS,
+        group_id=GROUP_ID,
         enable_auto_commit=True,
-        auto_offset_reset="earliest" if args.from_beginning else "latest",
+        auto_offset_reset="earliest" if FROM_BEGINNING else "latest",
         value_deserializer=lambda m: m.decode("utf-8", errors="ignore"),
         consumer_timeout_ms=0,
     )
@@ -111,7 +114,7 @@ def main():
     with Live(render_table(latest_per_device), console=console, refresh_per_second=8) as live:
         try:
             while True:
-                batches = consumer.poll(timeout_ms=args.poll_ms, max_records=500)
+                batches = consumer.poll(timeout_ms=POLL_MS, max_records=500)
                 updated = False
                 for _tp, records in batches.items():
                     for rec in records:
@@ -130,6 +133,7 @@ def main():
             pass
         finally:
             consumer.close()
+
 
 if __name__ == "__main__":
     main()
